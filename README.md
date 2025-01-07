@@ -54,10 +54,10 @@ The developed CNN model demonstrates potential for automating pneumonia detectio
 
 ## References :
 
-Dataset Source. [](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia)]
+Dataset Source. [Link](https://www.kaggle.com/datasets/paultimothymooney/chest-xray-pneumonia)]
 
 CNN Architecture Reference. [[Link](https://www.geeksforgeeks.org/introduction-convolution-neural-network/)]
 
-TensorFlow Documentation. [](https://www.tensorflow.org/tutorials?authuser=2)]
+TensorFlow Documentation. [Link](https://www.tensorflow.org/tutorials?authuser=2)]
 
-OpenCV Documentation. [](https://opencv.org/)]
+OpenCV Documentation. [Link](https://opencv.org/)]
