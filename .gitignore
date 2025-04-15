@@ -1,0 +1,54 @@
+# === Environnement virtuel ===
+venv/
+ENV/
+env/
+.venv/
+
+# === Fichiers Python compilés ===
+__pycache__/
+*.py[cod]
+*$py.class
+
+# === Fichiers de log / debug ===
+*.log
+
+# === Fichiers système Windows ===
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# === Fichiers système Mac (si jamais tu transfères) ===
+.DS_Store
+
+# === Jupyter Notebooks checkpoints ===
+.ipynb_checkpoints/
+
+# === Fichiers temporaires / sauvegardes ===
+*.bak
+*.tmp
+*.swp
+*.swo
+
+# === Fichiers secrets / variables d'environnement ===
+.env
+.env.*
+
+# === Cache Streamlit ===
+.streamlit/config.toml
+.streamlit/credentials.toml
+
+# === Dossiers spécifiques à TensorFlow ou data ===
+*.tfrecord
+*.h5
+*.ckpt*
+checkpoint/
+logs/
+events.out.tfevents.*
+
+# === Modèles ou poids ===
+*.hdf5
+*.pb
+saved_model/
+models/
+output/
+results/
