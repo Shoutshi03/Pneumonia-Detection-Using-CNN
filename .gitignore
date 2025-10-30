@@ -49,6 +49,5 @@ events.out.tfevents.*
 *.hdf5
 *.pb
 saved_model/
-models/
 output/
 results/
