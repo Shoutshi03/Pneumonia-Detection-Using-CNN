@@ -1,38 +1,36 @@
+import os
+import io
 import struct
 import sqlite3
-import io
-import os
+from datetime import datetime
+
 import numpy as np
 from PIL import Image
 import streamlit as st
-import tensorflow as tf
 import matplotlib.pyplot as plt
+import gdown
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
-from datetime import datetime
-import requests
 
 # ------------------------------
-# Télécharger le modèle si absent
+# Définition du modèle
 # ------------------------------
 MODEL_PATH = 'models/system.h5'
+# Lien direct Google Drive pour gdown
 MODEL_URL = "https://drive.google.com/file/d/1TQOytruN-z1UeRQDe8ylQBjfLrOs1_lI/view?usp=sharing"
 
 def download_model_if_missing():
     if not os.path.exists(MODEL_PATH):
         os.makedirs("models", exist_ok=True)
-        r = requests.get(MODEL_URL, stream=True)
-        with open(MODEL_PATH, "wb") as f:
-            for chunk in r.iter_content(chunk_size=8192):
-                f.write(chunk)
+        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
         st.info("Modèle téléchargé depuis Google Drive.")
 
 download_model_if_missing()
 
-# Charger le modèle
+# Charger le modèle Keras
 model = load_model(MODEL_PATH)
 
 # ------------------------------
@@ -42,8 +40,7 @@ def preprocess_image(image, target_size=(150, 150)):
     if image.mode != 'RGB':
         image = image.convert('RGB')
     image = image.resize(target_size)
-    image = img_to_array(image)
-    image = image / 255.0
+    image = img_to_array(image) / 255.0
     image = np.expand_dims(image, axis=0)
     return image
 
@@ -56,6 +53,7 @@ def predict(image):
 # Base de données SQLite
 # ------------------------------
 def init_db():
+    os.makedirs("db", exist_ok=True)
     conn = sqlite3.connect("db/results.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -130,14 +128,14 @@ def create_pdf(session_results):
     return buffer.getvalue()
 
 # ------------------------------
-# Interface utilisateur Streamlit
+# Interface Streamlit
 # ------------------------------
-st.title("Détection de la Pneumonie dans les images radiographiques à l'aide de l'intelligence artificielle !")
-st.write("Upload one or more x-ray images to detect if they show signs of pneumonia.")
+st.title("Détection de la Pneumonie dans les images radiographiques à l'aide de l'IA !")
+st.write("Upload one or more X-ray images to detect pneumonia.")
 
 init_db()
 
-uploaded_files = st.file_uploader("Choose one or more images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
+uploaded_files = st.file_uploader("Choose one or more images", type=["jpg","png","jpeg"], accept_multiple_files=True)
 
 session_results_for_pdf = []
 
@@ -187,7 +185,6 @@ if uploaded_files:
         pdf_bytes = create_pdf(session_results_for_pdf)
         pdf_filename = f"pneumonia_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
 
-        # Bouton violet centré
         st.markdown(
             """
             <style>
@@ -201,7 +198,7 @@ if uploaded_files:
             </style>
             """, unsafe_allow_html=True
         )
-        col1, col2, col3 = st.columns([1, 1, 1])
+        col1, col2, col3 = st.columns([1,1,1])
         with col2:
             st.download_button(
                 label="Télécharger le rapport PDF",

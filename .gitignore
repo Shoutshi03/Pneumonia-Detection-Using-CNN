@@ -17,7 +17,7 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# === Fichiers système Mac (si jamais tu transfères) ===
+# === Fichiers système Mac ===
 .DS_Store
 
 # === Jupyter Notebooks checkpoints ===
@@ -39,15 +39,16 @@ Desktop.ini
 
 # === Dossiers spécifiques à TensorFlow ou data ===
 *.tfrecord
-
 *.ckpt*
 checkpoint/
 logs/
 events.out.tfevents.*
 
 # === Modèles ou poids ===
-
 *.pb
 saved_model/
 output/
 results/
+
+# Inclure le modèle Keras
+!models/*.h5
