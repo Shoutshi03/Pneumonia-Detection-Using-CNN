@@ -5,3 +5,4 @@ numpy
 matplotlib
 h5py
 reportlab
+requests

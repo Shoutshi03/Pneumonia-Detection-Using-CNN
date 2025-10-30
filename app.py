@@ -1,6 +1,7 @@
 import struct
 import sqlite3
 import io
+import os
 import numpy as np
 from PIL import Image
 import streamlit as st
@@ -12,17 +13,34 @@ from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
 from datetime import datetime
+import requests
+
+# ------------------------------
+# Télécharger le modèle si absent
+# ------------------------------
+MODEL_PATH = 'models/system.h5'
+MODEL_URL = "https://drive.google.com/file/d/1TQOytruN-z1UeRQDe8ylQBjfLrOs1_lI/view?usp=sharing"
+
+def download_model_if_missing():
+    if not os.path.exists(MODEL_PATH):
+        os.makedirs("models", exist_ok=True)
+        r = requests.get(MODEL_URL, stream=True)
+        with open(MODEL_PATH, "wb") as f:
+            for chunk in r.iter_content(chunk_size=8192):
+                f.write(chunk)
+        st.info("Modèle téléchargé depuis Google Drive.")
+
+download_model_if_missing()
 
 # Charger le modèle
-MODEL_PATH = 'models/system.h5'  
 model = load_model(MODEL_PATH)
 
-# Prétraitement de l'image
+# ------------------------------
+# Prétraitement et prédiction
+# ------------------------------
 def preprocess_image(image, target_size=(150, 150)):
-    # Convertir l'image en RGB si elle est en niveaux de gris
     if image.mode != 'RGB':
         image = image.convert('RGB')
-    
     image = image.resize(target_size)
     image = img_to_array(image)
     image = image / 255.0
@@ -32,9 +50,11 @@ def preprocess_image(image, target_size=(150, 150)):
 def predict(image):
     processed_image = preprocess_image(image)
     prediction = model.predict(processed_image)
-    # retourner float simple
     return float(prediction[0][0])
 
+# ------------------------------
+# Base de données SQLite
+# ------------------------------
 def init_db():
     conn = sqlite3.connect("db/results.db")
     cursor = conn.cursor()
@@ -53,39 +73,35 @@ def save_to_db(image_name, result, probability):
     conn = sqlite3.connect("db/results.db")
     cursor = conn.cursor()
     cursor.execute("""
-    INSERT INTO predictions (image_name, result, probability)
-    VALUES (?, ?, ?)
-""", (str(image_name), str(result), float(probability)))
+        INSERT INTO predictions (image_name, result, probability)
+        VALUES (?, ?, ?)
+    """, (str(image_name), str(result), float(probability)))
     conn.commit()
     conn.close()
 
+# ------------------------------
+# Génération du PDF
+# ------------------------------
 def create_pdf(session_results):
-    """
-    session_results: list of tuples (filename, label, probability, image_bytes)
-    Retourne: bytes du PDF
-    """
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
-    # Entête
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, height - 60, "Rapport de Détection de Pneumonie")
     c.setFont("Helvetica", 11)
     c.drawString(50, height - 80, f"Date : {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')} UTC")
     y = height - 110
 
-    # Pour chaque image, ajouter image + résultat
     for idx, (filename, label, probability, image_bytes) in enumerate(session_results):
-        # créer nouvelle page si nécessaire
         if y < 200:
             c.showPage()
             y = height - 60
+
         c.setFont("Helvetica-Bold", 12)
         c.drawString(50, y, f"{idx+1}. {filename}")
         y -= 18
 
-        # Insérer image (redimensionnement)
         try:
             pil_img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
             img_w, img_h = pil_img.size
@@ -102,7 +118,6 @@ def create_pdf(session_results):
             c.drawString(60, y, f"[Impossible d'insérer l'image : {e}]")
             y -= 18
 
-        # Résultat
         c.setFont("Helvetica", 11)
         c.drawString(60, y, f"Etat : {label}")
         y -= 16
@@ -114,7 +129,9 @@ def create_pdf(session_results):
     buffer.seek(0)
     return buffer.getvalue()
 
-# Interface utilisateur
+# ------------------------------
+# Interface utilisateur Streamlit
+# ------------------------------
 st.title("Détection de la Pneumonie dans les images radiographiques à l'aide de l'intelligence artificielle !")
 st.write("Upload one or more x-ray images to detect if they show signs of pneumonia.")
 
@@ -122,14 +139,12 @@ init_db()
 
 uploaded_files = st.file_uploader("Choose one or more images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 
-# zone où on stocke les résultats de la session courante (pour le PDF)
 session_results_for_pdf = []
 
 if uploaded_files:
     results = []
-    session_results_for_pdf = []  # réinitialiser
+    session_results_for_pdf = []
     for uploaded_file in uploaded_files:
-        # Lire bytes pour pouvoir réutiliser l'image plus tard dans le PDF
         file_bytes = uploaded_file.read()
         try:
             image = Image.open(io.BytesIO(file_bytes))
@@ -138,55 +153,44 @@ if uploaded_files:
             continue
 
         st.image(image, caption=f"Image : {uploaded_file.name}", use_container_width=True)
-        
+
         result = predict(image)
         label = "Pneumonia detected" if result > 0.5 else "No signs of pneumonia"
         probability = result
         results.append((uploaded_file.name, label, probability))
         save_to_db(uploaded_file.name, label, probability)
-
-        # stocker pour le PDF : filename, label, probability, bytes
         session_results_for_pdf.append((uploaded_file.name, label, probability, file_bytes))
-    
+
         if result > 0.5:
             st.error(f"Result for {uploaded_file.name} : {label} (probability : {result:.2f})")
         else:
             st.success(f"Result for {uploaded_file.name} : {label} (probability : {result:.2f})")
-     
+
+    # Statistiques globales
     st.write("### Global Statistics")
     total_images = len(results)
     pneumonia_detected = sum(1 for _, label, _ in results if label == "Pneumonia detected")
     st.write(f"Total number of images : {total_images}")
     st.write(f"Number of images with pneumonia detected : {pneumonia_detected}")
     st.write(f"Percentage of pneumonia detected : {(pneumonia_detected / total_images) *100:.2f}%")
-    st.write("### Visualization of Results")
-    labels = ['No signs of pneumonia', 'Pneumonia detected']
-    values = [total_images - pneumonia_detected, pneumonia_detected]
-    
+
+    # Pie chart
+    labels_chart = ['No signs of pneumonia', 'Pneumonia detected']
+    values_chart = [total_images - pneumonia_detected, pneumonia_detected]
     fig, ax = plt.subplots()
-    ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=['#1f77b4', '#ff7f0e'])
+    ax.pie(values_chart, labels=labels_chart, autopct='%1.1f%%', startangle=90, colors=['#1f77b4', '#ff7f0e'])
     ax.axis('equal')
     st.pyplot(fig)
 
-    # --- Préparer le PDF (uniquement avec les données de cette session) ---
+    # PDF
     if session_results_for_pdf:
         pdf_bytes = create_pdf(session_results_for_pdf)
-        # nom du fichier
         pdf_filename = f"pneumonia_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
 
-        # CSS pour rendre le bouton violet et centré (essaie plusieurs sélecteurs pour compatibilité)
+        # Bouton violet centré
         st.markdown(
             """
             <style>
-            /* Selector for current Streamlit download button */
-            button[data-testid="stDownloadButton"] {
-                background-color: #000 !important;
-                color: white !important;
-                border-radius: 8px !important;
-                padding: 8px 16px !important;
-                font-weight: 600 !important;
-            }
-            /* fallback selector */
             .stDownloadButton>button {
                 background-color: #6a0dad !important;
                 color: white !important;
@@ -197,11 +201,7 @@ if uploaded_files:
             </style>
             """, unsafe_allow_html=True
         )
-
-        # centrer le bouton en utilisant des colonnes
         col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            st.write("")  # colonne vide gauche
         with col2:
             st.download_button(
                 label="Télécharger le rapport PDF",
@@ -209,9 +209,10 @@ if uploaded_files:
                 file_name=pdf_filename,
                 mime="application/pdf"
             )
-        with col3:
-            st.write("")  # colonne vide droite
 
+# ------------------------------
+# Afficher les résultats enregistrés
+# ------------------------------
 st.write("### Recorded Results")
 if st.button("Show results"):
     conn = sqlite3.connect("db/results.db")
@@ -219,24 +220,19 @@ if st.button("Show results"):
     cursor.execute("SELECT * FROM predictions")
     rows = cursor.fetchall()
     conn.close()
-    
+
     if rows:
         st.write("### Results Details")
         for row in rows:
-            # Décoder les données si elles sont de type bytes
             image_name = row[1].decode('utf-8') if isinstance(row[1], bytes) else row[1]
             result = row[2].decode('utf-8') if isinstance(row[2], bytes) else row[2]
-            
-            # Traiter la probabilité
             if isinstance(row[3], bytes):
-                # Si la probabilité est stockée sous forme de bytes, la convertir en float
                 try:
-                    probability = struct.unpack('f', row[3])[0]  # Convertir les bytes en float
+                    probability = struct.unpack('f', row[3])[0]
                 except:
                     probability = float(np.frombuffer(row[3], dtype=np.float32)[0])
             else:
                 probability = float(row[3])
-            
             st.write(f"Image : {image_name} | Result : {result} | probability : {probability:.2f}")
     else:
         st.write("No results recorded.")
