@@ -3,4 +3,5 @@ tensorflow
 pillow
 numpy
 matplotlib
+h5py
 reportlab
