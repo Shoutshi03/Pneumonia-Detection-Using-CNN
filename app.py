@@ -2,45 +2,42 @@ import os
 import io
 import struct
 import sqlite3
-from datetime import datetime
-
 import numpy as np
 from PIL import Image
 import streamlit as st
+import tensorflow as tf
 import matplotlib.pyplot as plt
-import gdown
 from tensorflow.keras.models import load_model
 from tensorflow.keras.preprocessing.image import img_to_array
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 from reportlab.lib.utils import ImageReader
+from datetime import datetime
+import gdown
 
-# ------------------------------
-# Définition du modèle
-# ------------------------------
+# ---------------------------
+# Télécharger le modèle depuis Google Drive   https://drive.google.com/file/d/1TQOytruN-z1UeRQDe8ylQBjfLrOs1_lI/view?usp=drive_link
+# ---------------------------
 MODEL_PATH = 'models/system.h5'
-# Lien direct Google Drive pour gdown
-MODEL_URL = "https://drive.google.com/file/d/1TQOytruN-z1UeRQDe8ylQBjfLrOs1_lI/view?usp=sharing"
+FILE_ID = '1TQOytruN-z1UeRQDe8ylQBjfLrOs1_lI'  # Remplacer par l'ID réel du fichier dans Drive
 
-def download_model_if_missing():
-    if not os.path.exists(MODEL_PATH):
-        os.makedirs("models", exist_ok=True)
-        gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
-        st.info("Modèle téléchargé depuis Google Drive.")
-        
-download_model_if_missing()
+if not os.path.exists(MODEL_PATH):
+    os.makedirs("models", exist_ok=True)
+    url = f"https://drive.google.com/uc?id={FILE_ID}"
+    gdown.download(url, MODEL_PATH, quiet=False)
 
-# Charger le modèle Keras
+# Charger le modèle
 model = load_model(MODEL_PATH)
 
-# ------------------------------
-# Prétraitement et prédiction
-# ------------------------------
+# ---------------------------
+# Fonctions
+# ---------------------------
 def preprocess_image(image, target_size=(150, 150)):
     if image.mode != 'RGB':
         image = image.convert('RGB')
     image = image.resize(target_size)
-    image = img_to_array(image) / 255.0
+    image = img_to_array(image)
+    image = image / 255.0
     image = np.expand_dims(image, axis=0)
     return image
 
@@ -49,11 +46,7 @@ def predict(image):
     prediction = model.predict(processed_image)
     return float(prediction[0][0])
 
-# ------------------------------
-# Base de données SQLite
-# ------------------------------
 def init_db():
-    os.makedirs("db", exist_ok=True)
     conn = sqlite3.connect("db/results.db")
     cursor = conn.cursor()
     cursor.execute("""
@@ -77,14 +70,12 @@ def save_to_db(image_name, result, probability):
     conn.commit()
     conn.close()
 
-# ------------------------------
-# Génération du PDF
-# ------------------------------
 def create_pdf(session_results):
     buffer = io.BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
 
+    # Entête
     c.setFont("Helvetica-Bold", 16)
     c.drawString(50, height - 60, "Rapport de Détection de Pneumonie")
     c.setFont("Helvetica", 11)
@@ -95,7 +86,6 @@ def create_pdf(session_results):
         if y < 200:
             c.showPage()
             y = height - 60
-
         c.setFont("Helvetica-Bold", 12)
         c.drawString(50, y, f"{idx+1}. {filename}")
         y -= 18
@@ -127,16 +117,14 @@ def create_pdf(session_results):
     buffer.seek(0)
     return buffer.getvalue()
 
-# ------------------------------
-# Interface Streamlit
-# ------------------------------
-st.title("Détection de la Pneumonie dans les images radiographiques à l'aide de l'IA !")
-st.write("Upload one or more X-ray images to detect pneumonia.")
+# ---------------------------
+# Interface utilisateur
+# ---------------------------
+st.title("Détection de la Pneumonie dans les images radiographiques avec IA")
+st.write("Upload one or more x-ray images to detect signs of pneumonia.")
 
 init_db()
-
-uploaded_files = st.file_uploader("Choose one or more images", type=["jpg","png","jpeg"], accept_multiple_files=True)
-
+uploaded_files = st.file_uploader("Choose one or more images", type=["jpg", "png", "jpeg"], accept_multiple_files=True)
 session_results_for_pdf = []
 
 if uploaded_files:
@@ -151,7 +139,6 @@ if uploaded_files:
             continue
 
         st.image(image, caption=f"Image : {uploaded_file.name}", use_container_width=True)
-
         result = predict(image)
         label = "Pneumonia detected" if result > 0.5 else "No signs of pneumonia"
         probability = result
@@ -164,7 +151,6 @@ if uploaded_files:
         else:
             st.success(f"Result for {uploaded_file.name} : {label} (probability : {result:.2f})")
 
-    # Statistiques globales
     st.write("### Global Statistics")
     total_images = len(results)
     pneumonia_detected = sum(1 for _, label, _ in results if label == "Pneumonia detected")
@@ -172,15 +158,13 @@ if uploaded_files:
     st.write(f"Number of images with pneumonia detected : {pneumonia_detected}")
     st.write(f"Percentage of pneumonia detected : {(pneumonia_detected / total_images) *100:.2f}%")
 
-    # Pie chart
-    labels_chart = ['No signs of pneumonia', 'Pneumonia detected']
-    values_chart = [total_images - pneumonia_detected, pneumonia_detected]
+    labels = ['No signs of pneumonia', 'Pneumonia detected']
+    values = [total_images - pneumonia_detected, pneumonia_detected]
     fig, ax = plt.subplots()
-    ax.pie(values_chart, labels=labels_chart, autopct='%1.1f%%', startangle=90, colors=['#1f77b4', '#ff7f0e'])
+    ax.pie(values, labels=labels, autopct='%1.1f%%', startangle=90, colors=['#1f77b4', '#ff7f0e'])
     ax.axis('equal')
     st.pyplot(fig)
 
-    # PDF
     if session_results_for_pdf:
         pdf_bytes = create_pdf(session_results_for_pdf)
         pdf_filename = f"pneumonia_report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -188,6 +172,13 @@ if uploaded_files:
         st.markdown(
             """
             <style>
+            button[data-testid="stDownloadButton"] {
+                background-color: #6a0dad !important;
+                color: white !important;
+                border-radius: 8px !important;
+                padding: 8px 16px !important;
+                font-weight: 600 !important;
+            }
             .stDownloadButton>button {
                 background-color: #6a0dad !important;
                 color: white !important;
@@ -207,9 +198,6 @@ if uploaded_files:
                 mime="application/pdf"
             )
 
-# ------------------------------
-# Afficher les résultats enregistrés
-# ------------------------------
 st.write("### Recorded Results")
 if st.button("Show results"):
     conn = sqlite3.connect("db/results.db")
