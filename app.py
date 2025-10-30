@@ -27,7 +27,7 @@ def download_model_if_missing():
         os.makedirs("models", exist_ok=True)
         gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
         st.info("Modèle téléchargé depuis Google Drive.")
-
+        
 download_model_if_missing()
 
 # Charger le modèle Keras
