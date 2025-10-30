@@ -3,4 +3,3 @@ tensorflow
 pillow
 numpy
 matplotlib
-sqlite3-binary
