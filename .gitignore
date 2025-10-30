@@ -39,14 +39,14 @@ Desktop.ini
 
 # === Dossiers spécifiques à TensorFlow ou data ===
 *.tfrecord
-*.h5
+
 *.ckpt*
 checkpoint/
 logs/
 events.out.tfevents.*
 
 # === Modèles ou poids ===
-*.hdf5
+
 *.pb
 saved_model/
 output/
